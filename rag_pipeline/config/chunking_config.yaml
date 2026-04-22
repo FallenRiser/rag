@@ -1,0 +1,185 @@
+chunking:
+  # -----------------------------------------------------------------------
+  # Active strategy. Switch here to change chunking behaviour globally.
+  # -----------------------------------------------------------------------
+  # Strategies available:
+  #   document_aware  — Docling HybridChunker: token-aware, preserves document
+  #                     structure (headings, paragraphs, list items, table cells).
+  #                     Best when export.type = "doc_chunks".
+  #   hierarchical    — HierarchicalDocumentSplitter: builds a parent-child tree
+  #                     of chunks at multiple granularities. Use with AutoMergingRetriever.
+  #   recursive       — RecursiveDocumentSplitter: cascading separator strategy
+  #                     (similar to LangChain RecursiveCharacterTextSplitter).
+  #   sentence        — DocumentSplitter(split_by="sentence")
+  #   word            — DocumentSplitter(split_by="word")
+  #   passage         — DocumentSplitter(split_by="passage") — paragraph-level
+  #   page            — DocumentSplitter(split_by="page")
+  #   line            — DocumentSplitter(split_by="line")
+  #   character       — RecursiveDocumentSplitter(split_unit="char")
+  #   token           — RecursiveDocumentSplitter(split_unit="token")
+  #   markdown_header — MarkdownHeaderSplitter. Use when export.type = "markdown".
+  #   semantic        — EmbeddingBasedDocumentSplitter: cosine distance threshold.
+  #                     Requires an embedder (uses embedding_config.yaml provider).
+  strategy: "document_aware"
+
+  # -----------------------------------------------------------------------
+  # Shared parameters — apply to most DocumentSplitter-based strategies.
+  # Ignored for strategies that declare their own overrides below.
+  # -----------------------------------------------------------------------
+  split_length: 512       # Chunk size in units of `split_by` (words / chars / tokens)
+  split_overlap: 64       # Overlap units between consecutive chunks
+  split_threshold: 10     # Fragments smaller than this attach to the previous chunk
+
+  # -----------------------------------------------------------------------
+  # document_aware — Docling HybridChunker
+  # -----------------------------------------------------------------------
+  document_aware:
+    # Tokenizer used to count tokens and respect token budget.
+    # Must be a HuggingFace tokenizer id or local path.
+    tokenizer: "BAAI/bge-small-en-v1.5"
+    max_tokens: 512
+    # Merge sibling chunks that are individually under the token budget.
+    merge_peers: true
+    # Include section heading hierarchy in every chunk's metadata.
+    include_headings_in_metadata: true
+
+  # -----------------------------------------------------------------------
+  # hierarchical — HierarchicalDocumentSplitter
+  # -----------------------------------------------------------------------
+  hierarchical:
+    # Block sizes define the hierarchy levels from coarsest to finest.
+    # Example: [512, 128, 32] creates three levels:
+    #   level-0 (root / parent) : up to 512 units
+    #   level-1 (child)         : up to 128 units
+    #   level-2 (leaf)          : up to 32 units
+    # The AutoMergingRetriever will climb the tree and merge children into
+    # the parent when enough children are retrieved.
+    block_sizes: [512, 128, 32]
+    # Unit for block_sizes. Options: word | sentence | passage | page
+    split_by: "word"
+    split_overlap: 0
+
+  # -----------------------------------------------------------------------
+  # recursive — RecursiveDocumentSplitter
+  # -----------------------------------------------------------------------
+  recursive:
+    # Maximum chunk length measured in split_unit.
+    split_length: 512
+    split_overlap: 64
+    # Counting unit for split_length: word | char | token
+    split_unit: "word"
+    # Ordered list of separators. Applied in sequence: try "\n\n" first,
+    # fall back to "sentence", then "\n", then " ".
+    # "sentence" triggers the NLTK sentence tokenizer.
+    # All other strings are treated as regular expressions.
+    separators:
+      - "\n\n"
+      - "sentence"
+      - "\n"
+      - " "
+
+  # -----------------------------------------------------------------------
+  # sentence — DocumentSplitter(split_by="sentence")
+  # -----------------------------------------------------------------------
+  sentence:
+    split_length: 10        # Number of sentences per chunk
+    split_overlap: 2        # Overlapping sentences between chunks
+    split_threshold: 1      # Attach tiny fragments to previous chunk
+
+  # -----------------------------------------------------------------------
+  # word — DocumentSplitter(split_by="word")
+  # -----------------------------------------------------------------------
+  word:
+    split_length: 300
+    split_overlap: 50
+    split_threshold: 10
+
+  # -----------------------------------------------------------------------
+  # passage — DocumentSplitter(split_by="passage")  [paragraph-level]
+  # -----------------------------------------------------------------------
+  passage:
+    split_length: 5         # Number of paragraphs per chunk
+    split_overlap: 1
+    split_threshold: 1
+
+  # -----------------------------------------------------------------------
+  # page — DocumentSplitter(split_by="page")
+  # -----------------------------------------------------------------------
+  page:
+    split_length: 1
+    split_overlap: 0
+    split_threshold: 0
+
+  # -----------------------------------------------------------------------
+  # line — DocumentSplitter(split_by="line")
+  # -----------------------------------------------------------------------
+  line:
+    split_length: 20
+    split_overlap: 2
+    split_threshold: 1
+
+  # -----------------------------------------------------------------------
+  # character — RecursiveDocumentSplitter(split_unit="char")
+  # -----------------------------------------------------------------------
+  character:
+    split_length: 1500      # Characters per chunk
+    split_overlap: 200
+    separators:
+      - "\n\n"
+      - "\n"
+      - " "
+      - ""
+
+  # -----------------------------------------------------------------------
+  # token — RecursiveDocumentSplitter(split_unit="token")
+  # -----------------------------------------------------------------------
+  token:
+    split_length: 512
+    split_overlap: 64
+    separators:
+      - "\n\n"
+      - "sentence"
+      - "\n"
+      - " "
+
+  # -----------------------------------------------------------------------
+  # markdown_header — MarkdownHeaderSplitter
+  # Use when docling export.type = "markdown"
+  # -----------------------------------------------------------------------
+  markdown_header:
+    # Keep header text inside the chunk content. If false, headers are
+    # moved to chunk metadata only.
+    keep_headers: true
+    # Optional secondary split applied to each header-delimited chunk.
+    # Options: word | passage | period | line | null
+    secondary_split: "word"
+    split_length: 300
+    split_overlap: 0
+    split_threshold: 0
+    # Include page number and parent headers in metadata.
+    skip_empty_documents: true
+
+  # -----------------------------------------------------------------------
+  # semantic — EmbeddingBasedDocumentSplitter
+  # -----------------------------------------------------------------------
+  semantic:
+    # Number of sentences to group before computing embeddings.
+    sentences_per_group: 3
+    # Cosine-distance percentile threshold. A split is inserted where the
+    # distance between consecutive groups exceeds this percentile.
+    percentile: 0.95
+    # Merge chunks smaller than this (characters) with the next chunk.
+    min_length: 50
+    # Hard-split chunks larger than this (characters).
+    max_length: 1024
+
+  # -----------------------------------------------------------------------
+  # DocumentCleaner options (always applied before chunking)
+  # -----------------------------------------------------------------------
+  cleaner:
+    remove_empty_lines: true
+    remove_extra_whitespaces: true
+    remove_repeated_substrings: false
+    # Minimum character length for a document to pass through.
+    # Documents shorter than this are dropped before chunking.
+    min_content_length: 20

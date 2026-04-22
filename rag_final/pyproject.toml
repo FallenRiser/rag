@@ -1,0 +1,113 @@
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "rag-pipeline"
+version = "0.1.0"
+description = "Production-grade RAG pipeline using Haystack 2.x and Docling"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{ include = "." }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+# ── Core framework ──────────────────────────────────────────────────────────
+haystack-ai          = ">=2.26.0"
+docling              = ">=2.0.0"
+docling-haystack     = ">=1.0.0"
+docling-core         = ">=2.0.0"          # HybridChunker
+
+# ── API ─────────────────────────────────────────────────────────────────────
+fastapi              = ">=0.115.0"
+uvicorn              = { version = ">=0.32.0", extras = ["standard"] }
+python-multipart     = ">=0.0.9"          # file uploads
+
+# ── Config ──────────────────────────────────────────────────────────────────
+pydantic             = ">=2.8.0"
+pydantic-settings    = ">=2.5.0"
+pyyaml               = ">=6.0.0"
+python-dotenv        = ">=1.0.0"
+
+# ── Observability ───────────────────────────────────────────────────────────
+opentelemetry-sdk                        = ">=1.26.0"
+opentelemetry-exporter-otlp-proto-grpc   = ">=1.26.0"
+opentelemetry-instrumentation-fastapi    = ">=0.47b0"
+structlog                                = ">=24.4.0"
+
+# ── Optional: vector store integrations ────────────────────────────────────
+qdrant-client        = { version = ">=1.9.0",  optional = true }
+weaviate-client      = { version = ">=4.0.0",  optional = true }
+opensearch-py        = { version = ">=2.6.0",  optional = true }
+pgvector             = { version = ">=0.3.0",  optional = true }
+psycopg              = { version = ">=3.1.0",  optional = true, extras = ["binary"] }
+
+# ── Optional: embedding providers ──────────────────────────────────────────
+sentence-transformers = { version = ">=3.0.0", optional = true }
+cohere               = { version = ">=5.0.0",  optional = true }
+# ollama-haystack installed separately (not on PyPI extras yet):
+#   pip install ollama-haystack
+
+# ── Optional: OCR engines (Docling pulls EasyOCR by default) ───────────────
+rapidocr-onnxruntime = { version = ">=1.3.0",  optional = true }
+
+# ── Dev / test ──────────────────────────────────────────────────────────────
+pytest               = { version = ">=8.0.0",  optional = true }
+pytest-asyncio       = { version = ">=0.23.0", optional = true }
+pytest-cov           = { version = ">=5.0.0",  optional = true }
+httpx                = { version = ">=0.27.0", optional = true }  # test client
+ruff                 = { version = ">=0.4.0",  optional = true }
+mypy                 = { version = ">=1.10.0", optional = true }
+
+[tool.poetry.extras]
+qdrant      = ["qdrant-client"]
+weaviate    = ["weaviate-client"]
+opensearch  = ["opensearch-py"]
+pgvector    = ["pgvector", "psycopg"]
+cohere      = ["cohere"]
+sentence_transformers = ["sentence-transformers"]
+rapidocr    = ["rapidocr-onnxruntime"]
+dev         = ["pytest", "pytest-asyncio", "pytest-cov", "httpx", "ruff", "mypy"]
+all         = [
+  "qdrant-client", "weaviate-client", "opensearch-py", "pgvector", "psycopg",
+  "cohere", "sentence-transformers", "rapidocr-onnxruntime",
+  "pytest", "pytest-asyncio", "pytest-cov", "httpx", "ruff", "mypy",
+]
+
+# ── Pytest ───────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode   = "auto"
+testpaths      = ["tests"]
+addopts        = "-v --tb=short"
+markers        = [
+  "slow: marks tests that download model weights (deselect with -m 'not slow')",
+  "integration: marks end-to-end tests requiring external services",
+]
+
+# ── Coverage ─────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source   = ["."]
+omit     = ["tests/*", "**/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+
+# ── Ruff ─────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN", "BLE"]
+ignore = ["ANN101", "ANN102", "ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN"]
+
+# ── Mypy ─────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version        = "3.10"
+strict                = false
+ignore_missing_imports = true

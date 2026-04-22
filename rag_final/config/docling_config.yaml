@@ -1,0 +1,165 @@
+docling:
+  # -----------------------------------------------------------------------
+  # PDF pipeline options
+  # -----------------------------------------------------------------------
+  pdf:
+    do_ocr: true
+    # ocr_engine: easyocr | tesseract | rapidocr | surya
+    ocr_engine: "easyocr"
+    ocr_options:
+      # Language codes. EasyOCR uses ISO 639-1 ("en","de"), Tesseract uses
+      # 3-letter codes joined with '+' ("eng+deu") — the builder handles translation.
+      lang: ["en"]
+      # Force OCR on every page even when a digital text layer exists.
+      force_full_page_ocr: false
+      # Extra CLI arguments forwarded to tesseract binary (tesseract engine only).
+      tesseract_extra_args: []
+      # RapidOCR engine config path (rapidocr engine only). Null = use bundled default.
+      rapidocr_config_path: null
+
+    do_table_structure: true
+    table_structure_options:
+      # accurate = TableFormer full model (slow, precise)
+      # fast     = rule-based heuristic (fast, less precise)
+      mode: "accurate"
+      # Whether to perform OCR on table cells that have no embedded text.
+      do_cell_matching: true
+
+    # Needed for VLM enrichments (picture description, classification).
+    # Set false to skip image rendering and save memory.
+    generate_page_images: true
+    # DPI scale applied when rendering page images. 2.0 = 144 dpi. Higher = better
+    # OCR quality / enrichment fidelity but more RAM and processing time.
+    images_scale: 2.0
+
+    # Bitmap images embedded inside PDFs are extracted and stored separately.
+    generate_picture_images: true
+
+  # -----------------------------------------------------------------------
+  # DOCX pipeline options (overrides pdf.* for Word documents)
+  # -----------------------------------------------------------------------
+  docx:
+    do_ocr: false           # Embedded images in DOCX can still be captioned
+    generate_page_images: false
+    generate_picture_images: true
+
+  # -----------------------------------------------------------------------
+  # HTML pipeline options
+  # -----------------------------------------------------------------------
+  html:
+    do_ocr: false
+    generate_page_images: false
+    generate_picture_images: true
+
+  # -----------------------------------------------------------------------
+  # PowerPoint pipeline options
+  # -----------------------------------------------------------------------
+  pptx:
+    do_ocr: false
+    generate_page_images: true
+    generate_picture_images: true
+
+  # -----------------------------------------------------------------------
+  # Image pipeline options (PNG, JPEG, TIFF — treated as single-page docs)
+  # -----------------------------------------------------------------------
+  image:
+    do_ocr: true
+    ocr_engine: "easyocr"
+    force_full_page_ocr: true          # Always OCR; no digital text layer possible
+
+  # -----------------------------------------------------------------------
+  # Enrichment models
+  # All enrichments are disabled by default; enable selectively for speed vs. quality.
+  # -----------------------------------------------------------------------
+  enrichments:
+    # --- Picture description (image captioning via VLM) ---
+    picture_description:
+      enabled: true
+      # backend: ollama | azure_openai | openai_compatible | huggingface_local
+      backend: "ollama"
+
+      ollama:
+        base_url: "http://localhost:11434"
+        model: "granite3.2-vision:latest"
+        # Alternative vision models: llava:latest, llava-phi3:latest, moondream:latest
+        prompt: >
+          Describe this image from a technical document concisely and accurately.
+          Focus on charts, diagrams, tables, equations, or any relevant visual content.
+          Return plain text only.
+        timeout_seconds: 120
+        # If the Ollama server is unavailable, skip captioning rather than failing.
+        fail_on_error: false
+
+      azure_openai:
+        # All keys pulled from environment variables — never hard-coded.
+        api_key_env: "AZURE_OPENAI_API_KEY"
+        endpoint_env: "AZURE_OPENAI_ENDPOINT"
+        deployment_name_env: "AZURE_OPENAI_VISION_DEPLOYMENT"
+        api_version: "2024-10-01-preview"
+        prompt: >
+          Describe this image from a technical document concisely and accurately.
+          Focus on charts, diagrams, tables, equations, or any relevant visual content.
+          Return plain text only.
+        max_tokens: 512
+        timeout_seconds: 60
+        fail_on_error: true
+
+      openai_compatible:
+        base_url_env: "VLM_BASE_URL"        # e.g. https://api.openai.com/v1
+        api_key_env: "VLM_API_KEY"
+        model: "gpt-4o"
+        prompt: >
+          Describe this image from a technical document concisely and accurately.
+        max_tokens: 512
+        timeout_seconds: 60
+        fail_on_error: true
+
+    # --- Picture classification ---
+    picture_classification:
+      enabled: true
+      # Uses Docling's built-in lightweight classifier (no external dependencies).
+
+    # --- Code block understanding ---
+    code_understanding:
+      enabled: true
+      # Identifies programming language and structures code blocks for better retrieval.
+
+    # --- Mathematical formula recognition ---
+    formula_understanding:
+      enabled: false
+      # Requires extra model weights; expensive. Enable for scientific/academic docs.
+
+  # -----------------------------------------------------------------------
+  # Export / output mode
+  # -----------------------------------------------------------------------
+  export:
+    # doc_chunks: DoclingConverter produces one Haystack Document per Docling chunk.
+    #             Chunk metadata (headings, bbox, page, origin) is preserved.
+    #             Best for structured docs (papers, reports). DEFAULT.
+    # markdown:   DoclingConverter produces one Haystack Document per input file
+    #             containing the full document as Markdown text.
+    #             A downstream Haystack splitter is then required.
+    type: "doc_chunks"
+
+    markdown_options:
+      # How to represent embedded images in the Markdown output.
+      # placeholder: inserts a text tag (e.g. <!-- image -->)
+      # referenced:  inserts a path/URL to the extracted image file
+      image_mode: "placeholder"
+      # Include page-break markers between pages.
+      add_page_break: true
+
+  # -----------------------------------------------------------------------
+  # Conversion performance
+  # -----------------------------------------------------------------------
+  performance:
+    # Number of threads for CPU-bound document conversion.
+    # 0 = auto-detect (uses all available cores).
+    num_threads: 0
+    # Device for neural model inference: cpu | cuda | mps
+    # "auto" selects cuda if available, then mps, then cpu.
+    device: "auto"
+    # Maximum number of documents to convert in parallel.
+    batch_size: 4
+    # Stop trying to convert a single document after this many seconds.
+    timeout_per_document_seconds: 300

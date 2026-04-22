@@ -1,0 +1,139 @@
+query:
+  # -----------------------------------------------------------------------
+  # Retrieval settings
+  # -----------------------------------------------------------------------
+  retrieval:
+    # Top-K documents fetched from the vector store.
+    top_k: 5
+    # search_type: embedding | bm25 | hybrid
+    #   embedding — pure vector search (cosine / dot-product)
+    #   bm25      — keyword BM25 (InMemory / OpenSearch only)
+    #   hybrid    — embedding + BM25 results merged with DocumentJoiner
+    search_type: "embedding"
+
+    # Hybrid search weights (must sum to 1.0).
+    # Only used when search_type = "hybrid".
+    hybrid:
+      embedding_weight: 0.7
+      bm25_weight: 0.3
+      # join_mode: concatenate | reciprocal_rank_fusion
+      join_mode: "reciprocal_rank_fusion"
+
+    # Metadata filter applied to every retrieval call.
+    # Set to null to disable. Example:
+    #   default_filters:
+    #     field: "source_file"
+    #     operator: "in"
+    #     value: ["report.pdf"]
+    default_filters: null
+
+  # -----------------------------------------------------------------------
+  # Auto-merging (only active when chunking.strategy = "hierarchical")
+  # -----------------------------------------------------------------------
+  auto_merging:
+    enabled: true
+    # Merge a parent chunk if this fraction of its children are retrieved.
+    threshold: 0.5
+
+  # -----------------------------------------------------------------------
+  # Reranking (optional — applied after retrieval, before generation)
+  # -----------------------------------------------------------------------
+  reranker:
+    # strategy: none | lost_in_middle | llm
+    #   none           — pass retrieved docs straight to the prompt
+    #   lost_in_middle — reorders docs so the most-relevant are at start/end
+    #   llm            — LLMRanker (Haystack 2.26): uses LLM to score each doc
+    strategy: "lost_in_middle"
+
+    llm_ranker:
+      # How many documents the LLM ranker scores per call.
+      # Lower = fewer API calls but potentially worse recall.
+      top_k: 10
+      # meta_fields_to_embed passed to the ranker prompt.
+      meta_fields: ["source_file", "page_number", "headings"]
+
+  # -----------------------------------------------------------------------
+  # Prompt template (Jinja2)
+  # -----------------------------------------------------------------------
+  prompt:
+    # System message prepended before the context.
+    system_message: >
+      You are a precise and factual assistant. Answer the user's question based
+      strictly on the provided context documents. If the answer is not contained
+      in the context, say "I don't have enough information to answer this."
+      Always cite the source document name when making a factual claim.
+
+    # Main prompt template. Variables available:
+    #   {{ documents }} — list of retrieved Document objects
+    #   {{ query }}     — the user's question
+    template: |
+      Context documents:
+      {% for doc in documents %}
+      ---
+      Source: {{ doc.meta.get('source_file', 'unknown') }}{% if doc.meta.get('page_number') %} (page {{ doc.meta.get('page_number') }}){% endif %}
+      {% if doc.meta.get('headings') %}Section: {{ doc.meta.get('headings') | join(' > ') }}{% endif %}
+
+      {{ doc.content }}
+      {% endfor %}
+      ---
+
+      Question: {{ query }}
+
+      Answer:
+
+    # Maximum number of documents included in the prompt context.
+    # Documents beyond this limit are silently dropped (after reranking).
+    max_context_docs: 5
+    # Truncate each document to this many characters before inserting into prompt.
+    # Prevents prompt overflow on very long chunks.
+    max_chars_per_doc: 2000
+
+  # -----------------------------------------------------------------------
+  # LLM generator (text generation)
+  # -----------------------------------------------------------------------
+  generator:
+    # backend: azure_openai | openai | ollama
+    backend: "azure_openai"
+
+    azure_openai:
+      api_key_env: "AZURE_OPENAI_API_KEY"
+      azure_endpoint_env: "AZURE_OPENAI_ENDPOINT"
+      # Chat completion deployment (e.g. gpt-4o, gpt-4-turbo)
+      deployment_name_env: "AZURE_OPENAI_CHAT_DEPLOYMENT"
+      api_version: "2024-10-01-preview"
+      # Generation parameters.
+      temperature: 0.0
+      max_tokens: 1024
+      top_p: 1.0
+      # Number of retries on transient API errors.
+      max_retries: 3
+      # Stream tokens back to the caller (for SSE endpoints).
+      streaming: false
+
+    openai:
+      api_key_env: "OPENAI_API_KEY"
+      model: "gpt-4o"
+      temperature: 0.0
+      max_tokens: 1024
+      top_p: 1.0
+      streaming: false
+
+    ollama:
+      base_url: "http://localhost:11434"
+      # Models: llama3.1:8b, mistral:7b, phi3:mini, qwen2.5:7b
+      model: "llama3.1:8b"
+      temperature: 0.0
+      # Context window for the model (tokens).
+      context_window: 8192
+      streaming: false
+
+  # -----------------------------------------------------------------------
+  # Answer builder settings
+  # -----------------------------------------------------------------------
+  answer:
+    # Include source documents in the API response.
+    include_sources: true
+    # Maximum sources returned alongside the answer.
+    max_sources: 5
+    # Include relevance scores with each source.
+    include_scores: true
